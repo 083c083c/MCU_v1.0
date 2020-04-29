@@ -4,6 +4,7 @@ Name:				MCU SOFTWARE
 Version:			1.1
 Date:				29.04.2020
 Comment:			COMPLETELY STABLE VERSION (with USB)
+Recent updates:		added version log, status log, split INIT 
 Owner:				DVLabs
 
 */
@@ -69,6 +70,7 @@ int current_pos_f;
 int current_pos_d;
 
 int percent_int_f = 0;
+int mem_f;
 int all_steps_f = 0;
 float one_step_f = 0.0;
 int go_step_f = 0;
@@ -77,6 +79,7 @@ char valuev[100];
 char valuev1[100];
 
 int percent_int_d = 0;
+int mem_d;
 int all_steps_d = 0;
 float one_step_d = 0.0;
 int go_step_d = 0;
@@ -454,13 +457,17 @@ int stps_d;
 					 {
 							input=10;
 					 }
-					 else if(strncmp(usb_rx,"ver\r",4)==0) 					//запрос версии прошивки
+					 else if(strncmp(usb_rx,"ver\r",4)==0) 						//запрос версии прошивки
 					 {
 							input=11;
-					 }					 
-					 else if(strcmp(usb_rx,str)==0) 									//парсинг чисел из терминала
+					 }
+					 else if(strncmp(usb_rx,"status\r",7)==0) 				//запрос позиции движков
 					 {
 							input=12;
+					 }					 
+					 else if(strcmp(usb_rx,str)==0) 										//парсинг чисел из терминала
+					 {
+							input=13;
 					 }
 					 else 
 					 {
@@ -746,16 +753,57 @@ int stps_d;
 		}							
 						break;					
 					
-					case 11:
+					case 11:																																			//запрос версии прошивки
 									CDC_Transmit_FS((uint8_t *)VERSION_STRING, strlen(VERSION_STRING));
 
 						break;
 				
-					case 12:																																			//  dxxx / fxxx
+					case 12:																																			//запрос позиции движков						
+	
+									if (INITD_flag==0)
+											{
+												CDC_Transmit_FS((uint8_t *)"INITD >>> required\nDIAPH POS: NONE\n\n", 36);
+												HAL_Delay(1);
+											}	
+				
+									else
+											{
+												CDC_Transmit_FS((uint8_t *)"INITD >>> OK\n", 13);
+												HAL_Delay(1);
+												sprintf(valuev1,"DIAPH POS: %d%% ", mem_d);
+												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));							
+												HAL_Delay(1);
+												sprintf(valuev,"(%d steps)\n", current_pos_d);
+												CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
+												HAL_Delay(1);
+											}						
+
+											
+									if (INITF_flag==0)
+											{
+												CDC_Transmit_FS((uint8_t *)"INITF >>> required\nFOCUS POS: NONE\n\n", 36);
+												HAL_Delay(1);												
+											}	
+				
+									else
+											{
+												CDC_Transmit_FS((uint8_t *)"INITF >>> OK\n", 13);
+												HAL_Delay(1);
+												sprintf(valuev1,"FOCUS POS: %d%% ", mem_f);
+												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));							
+												HAL_Delay(1);
+												sprintf(valuev,"(%d steps)\n", current_pos_f);
+												CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
+												HAL_Delay(1);
+											}									
+
+						break;
+				
+					case 13:																																			//  dxxx / fxxx
 					
 					if(strncmp(usb_rx,"f", 1)==0)
 					{
-							percent_int_f = atoi(str+1);												
+							percent_int_f = atoi(str+1);
 						
 							if (strncmp(usb_rx,"f0", 2)==0)
 								{
@@ -930,9 +978,17 @@ int stps_d;
 							CDC_Transmit_FS((uint8_t *)"invalid command\n",16);
 						break;													
 		}
+											percent_int_d=0;
+											one_step_d = all_steps_d/100.0;          
+											mem_d = current_pos_d / one_step_d;
+											percent_int_f=0;
+											one_step_f = all_steps_f/100.0;          
+											mem_f = current_pos_f / one_step_f;		
+		
+		
 					memset(uart1_rx_buf, '\0', strlen(uart1_rx_buf)); // очистка памяти
 					uart1_rx_bit=0;                                // очистка счётчика			
-					CDC_Transmit_FS((uint8_t*)&usb_rx, strlen(usb_rx));			
+//					CDC_Transmit_FS((uint8_t*)&usb_rx, strlen(usb_rx));			
 					memset(usb_rx, 0, sizeof(usb_rx));
 					memset(usb_rx, '\0', sizeof(usb_rx));
 					stop_motor_F();
