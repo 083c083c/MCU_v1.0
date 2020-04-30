@@ -4,7 +4,7 @@ Name:				MCU SOFTWARE
 Version:			1.1
 Date:				29.04.2020
 Comment:			COMPLETELY STABLE VERSION (with USB)
-Recent updates:		added version log, status log, split INIT 
+Recent updates:			added version log, status log, split INIT 
 Owner:				DVLabs
 
 */
