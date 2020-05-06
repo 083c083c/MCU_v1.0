@@ -1,11 +1,12 @@
 /*
 
-Name:				MCU SOFTWARE
-Version:			1.1
-Date:				29.04.2020
-Comment:			COMPLETELY STABLE VERSION (with USB)
-Recent updates:			added version log, status log, split INIT 
-Owner:				DVLabs
+Name:					MCU SOFTWARE
+Version:				1.1.1
+Date:					06.05.2020
+Comment:				COMPLETELY STABLE VERSION (with USB)
+Recent updates:				now new commands
+Owner:					DVLabs
+Made by:				083c083c
 
 */
 
@@ -38,7 +39,7 @@ UART_HandleTypeDef huart3;
 #define EN_MOT_1_2 GPIO_PIN_13
 
 
-#define VERSION_STRING "VERSION: 1.1\n"  //ВЕРСИЯ ПРОШИВКИ
+#define VERSION_STRING "MCU_V_1_1\n"  //ВЕРСИЯ ПРОШИВКИ
 
 
 #define PORT_M_2 GPIOC
@@ -71,20 +72,22 @@ int current_pos_d;
 
 int percent_int_f = 0;
 int mem_f;
+int mem_perc_f;
 int all_steps_f = 0;
 float one_step_f = 0.0;
 int go_step_f = 0;
 _Bool go_dir_f = 0;
-char valuev[100];
-char valuev1[100];
 
 int percent_int_d = 0;
 int mem_d;
+int mem_perc_d;
 int all_steps_d = 0;
 float one_step_d = 0.0;
 int go_step_d = 0;
 _Bool go_dir_d = 0;
-//char valuev_d[100];
+
+char valuev[100];
+char valuev1[100];
 
 /* USER CODE END PV */
 
@@ -145,11 +148,6 @@ void EXTI12_IRQHandler(void)						//interrupt FAULT
 						HAL_Delay(50);
 						HAL_GPIO_WritePin(STMPS_PORT, STMPS_EN, GPIO_PIN_RESET);
 					}
-//	else if (HAL_GPIO_ReadPin(STMPS_PORT, STMPS_FT)==0)
-//					{
-//						HAL_UART_Transmit(&huart1, (uint8_t *)"ok! go!\n", 8, 0xfff);
-//						HAL_GPIO_WritePin(STMPS_PORT, STMPS_EN, GPIO_PIN_RESET);					
-//					}
 								
 		HAL_GPIO_EXTI_IRQHandler(STMPS_FT);
 }
@@ -412,62 +410,49 @@ int stps_d;
 	
 		uint16_t len = strlen((const char*)usb_rx);
 	
-	//if(uart1_data=='\r')
 	    if(len > 0)
 			
 			{		
 				 const char *str=usb_rx;
-					 if			((strncmp(usb_rx,"INITF\r", 5)==0) || (strncmp(usb_rx,"initf\r", 5)==0) ) 				//инициализация движка. проход от магнита до магнита
+					 if			(strncmp(usb_rx,"AT+FIN\r", 7)==0)   				//INITF
 					 {
 							input=1;
 					 }
-					 else if((strncmp(usb_rx,"INITD\r", 5)==0) || (strncmp(usb_rx,"initd\r", 5)==0) ) 				//инициализация движка. проход от магнита до магнита
+					 else if(strncmp(usb_rx,"AT+AIN\r", 7)==0) 				  //INITD
 					 {
 							input=2;
 					 }					 
-					 else if(strncmp(usb_rx,"min_f\r", 5)==0) 				//крайнее положение
+					 else if(strncmp(usb_rx,"AT+FMIN\r", 8)==0) 				//min focus
 					 {
 							input=3;
 					 }
-					 else if(strncmp(usb_rx,"min_d\r",5)==0) 					//крайнее положение
+					 else if(strncmp(usb_rx,"AT+AMIN\r",8)==0) 					//min diaph
 					 {
 							input=4;
 					 } 					 
-					 else if(strncmp(usb_rx,"max_f\r",5)==0) 					//крайнее положение 
+					 else if(strncmp(usb_rx,"AT+FMAX\r",8)==0) 					//max focus
 					 {
 							input=5;
 					 }
-					 else if(strncmp(usb_rx,"max_d\r",5)==0) 					//крайнее положение 
+					 else if(strncmp(usb_rx,"AT+AMAX\r",8)==0) 					//max diaph
 					 {
 							input=6;
 					 }			 
-					 else if(strncmp(usb_rx,"+10f\r",4)==0) 					//+10 шагов
-					 {
-							input=7;
-					 }
-					 else if(strncmp(usb_rx,"+10d\r",4)==0) 					//+10 шагов
-					 {
-							input=8;
-					 }					 
-					 else if(strncmp(usb_rx,"-10f\r",4)==0) 					//+10 шагов 
-					 {
-							input=9;
-					 }
-					 else if(strncmp(usb_rx,"-10d\r",4)==0) 					//+10 шагов 
-					 {
-							input=10;
-					 }
-					 else if(strncmp(usb_rx,"ver\r",4)==0) 						//запрос версии прошивки
+					 else if(strncmp(usb_rx,"AT+CMGR?\r",9)==0) 		  	//запрос версии прошивки
 					 {
 							input=11;
 					 }
-					 else if(strncmp(usb_rx,"status\r",7)==0) 				//запрос позиции движков
+					 else if(strncmp(usb_rx,"AT+APOS?\r",9)==0) 			  //запрос позиции focus движка
 					 {
 							input=12;
+					 }
+					 else if(strncmp(usb_rx,"AT+FPOS?\r",9)==0) 			  //запрос позиции diaph движкa
+					 {
+							input=13;
 					 }					 
 					 else if(strcmp(usb_rx,str)==0) 										//парсинг чисел из терминала
 					 {
-							input=13;
+							input=14;
 					 }
 					 else 
 					 {
@@ -477,52 +462,57 @@ int stps_d;
 		switch (input)
 		{
 					
-					case 1:																																			//INITF
-							CDC_Transmit_FS((uint8_t *)"Initializing FOCUS\n", 19);						
-							all_steps_f = init_F();
-					if (all_steps_f>3900)
-					{
-							CDC_Transmit_FS((uint8_t *)"INITF FAILED\nTOO MANY STEPS\n", 28);
-							INITF_flag=0;						
-					}
-					else
-					{
-							if (current_pos_f < 0) current_pos_f = 0;
-							else current_pos_f = all_steps_f;
-							CDC_Transmit_FS((uint8_t *)"INITF OK\n", 9);
-//							sprintf(valuev,"Current position: %d steps\n", current_pos_f);
-//							CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));					
-					}
+					case 1:																																				//INITF		 +FIN
+								HAL_Delay(1);
+								CDC_Transmit_FS((uint8_t *)"OK\n", 3);
+								all_steps_f = init_F();
+							if (all_steps_f>3900)
+									{
+											HAL_Delay(1);
+											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 21\n", 15);
+											INITF_flag=0;						
+									}
+							else
+									{
+											if (current_pos_f < 0) current_pos_f = 0;
+											else current_pos_f = all_steps_f;
+											HAL_Delay(1);
+											CDC_Transmit_FS((uint8_t *)"+FIN OK\n", 8);			
+									}
 						break;
 					
-					case 2:																																				//INITD
-							CDC_Transmit_FS((uint8_t *)"Initializing DIAPH\n", 19);						
-							all_steps_d = init_D();
-					if (all_steps_d>850)
-					{
-							CDC_Transmit_FS((uint8_t *)"INITD FAILED\nTOO MANY STEPS\n", 28);	
-							INITD_flag=0;						
-					}
-					else
-					{
-							if (current_pos_d < 0) current_pos_d = 0;
-							else current_pos_d = all_steps_d; 
-							CDC_Transmit_FS((uint8_t *)"INITD OK\n", 9);
-//							sprintf(valuev,"Current position: %d steps\n", current_pos_d);
-//							CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));					
-					}
+					case 2:																																				//INITD     +AIN
+								HAL_Delay(1);					
+								CDC_Transmit_FS((uint8_t *)"OK\n", 3);						
+								all_steps_d = init_D();
+							if (all_steps_d>850)
+									{
+											HAL_Delay(1);								
+											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 11\n", 15);	
+											INITD_flag=0;						
+									}
+							else
+									{
+											if (current_pos_d < 0) current_pos_d = 0;
+											else current_pos_d = all_steps_d;
+											HAL_Delay(1);										
+											CDC_Transmit_FS((uint8_t *)"+AIN OK\n", 8);					
+									}
 						break;					
 					
-					case 3:																																			//min_f	
-
+					case 3:																																			  //min_f    +FMIN
+							HAL_Delay(1);		
+							CDC_Transmit_FS((uint8_t *)"OK\n", 3);
 							if (INITF_flag==0)
 									{
-										CDC_Transmit_FS((uint8_t *)"not allowed\nINITF required\n", 27);
+											HAL_Delay(1);
+											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
 									}
 					
 							else
-							{
+								{
 									percent_int_f = 0;
+									mem_perc_f=percent_int_f;
 									one_step_f = all_steps_f/100.0;          
 									stps_f = ((float)percent_int_f * one_step_f);
 											
@@ -540,23 +530,24 @@ int stps_d;
 									motor_F(1,go_step_f,go_dir_f);
 									go_step_f = 0;
 
-									sprintf(valuev,"Current FOCUS position: %d steps\n", current_pos_f);
-									CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-									HAL_Delay(1);
-									CDC_Transmit_FS((uint8_t *)"min_f OK\n", 9);	
-			}								
+								HAL_Delay(1);										
+								CDC_Transmit_FS((uint8_t *)"+FMIN OK\n", 9);									
+								}								
 						break;
 								
-					case 4:																																			//min_d	
-						
+					case 4:																																			//min_d	   +AMIN
+							HAL_Delay(1);
+							CDC_Transmit_FS((uint8_t *)"OK\n", 3);				
 							if (INITD_flag==0)
 									{
-										CDC_Transmit_FS((uint8_t *)"not allowed\nINITD required\n", 27);
+											HAL_Delay(1);									
+											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
 									}	
 		
 							else
-							{					
+								{					
 									percent_int_d = 0;
+									mem_perc_d=percent_int_d;
 									one_step_d = all_steps_d/100.0;          
 									stps_d = ((float)percent_int_d * one_step_d);
 											
@@ -574,23 +565,24 @@ int stps_d;
 									motor_D(1,go_step_d,go_dir_d);
 									go_step_d = 0;
 
-									sprintf(valuev,"Current DIAPH position: %d steps\n", current_pos_d);
-									CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-									HAL_Delay(1);
-									CDC_Transmit_FS((uint8_t *)"min_d OK\n", 9);
-		}								
+								HAL_Delay(1);
+								CDC_Transmit_FS((uint8_t *)"+AMIN OK\n", 9);
+								}								
 						break;								
 					
-					case 5:																																			//max_f
-
+					case 5:																																			//max_f    +FMAX
+							HAL_Delay(1);
+							CDC_Transmit_FS((uint8_t *)"OK\n", 3);
 							if (INITF_flag==0)
 									{
-										CDC_Transmit_FS((uint8_t *)"not allowed\nINITF required\n", 27);
+											HAL_Delay(1);									
+											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
 									}
 		
 							else
-							{					
+								{					
 									percent_int_f = 100;
+									mem_perc_f=percent_int_f;
 									one_step_f = all_steps_f/100.0;          
 									stps_f = ((float)percent_int_f * one_step_f);
 														
@@ -608,23 +600,25 @@ int stps_d;
 									motor_F(1,go_step_f,go_dir_f);
 									go_step_f = 0;
 
-									sprintf(valuev,"Current FOCUS position: %d steps\n", current_pos_f);
-									CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-									HAL_Delay(1);								
-									CDC_Transmit_FS((uint8_t *)"max_f OK\n", 9);
-		}								
+								HAL_Delay(1);
+								CDC_Transmit_FS((uint8_t *)"+FMAX OK\n", 9);
+								}								
 						break;
 								
-					case 6:																																			//max_d	
-						
+					case 6:																																			//max_d	    +AMAX
+							HAL_Delay(1);
+							CDC_Transmit_FS((uint8_t *)"OK\n", 3);
+					
 							if (INITD_flag==0)
 									{
-										CDC_Transmit_FS((uint8_t *)"not allowed\nINITD required\n", 27);
+											HAL_Delay(1);										
+											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
 									}	
 		
 							else
 							{						
 									percent_int_d = 100;
+									mem_perc_d=percent_int_d;
 									one_step_d = all_steps_d/100.0;          
 									stps_d = ((float)percent_int_d * one_step_d);
 														
@@ -642,180 +636,74 @@ int stps_d;
 									motor_D(1,go_step_d,go_dir_d);
 									go_step_d = 0;
 
-									sprintf(valuev,"Current DIAPH position: %d steps\n", current_pos_d);
-									CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-									HAL_Delay(1);	
-									CDC_Transmit_FS((uint8_t *)"max_d OK\n", 9);	
+								HAL_Delay(1);		
+								CDC_Transmit_FS((uint8_t *)"+AMAX OK\n", 9);	
 		}								
 						break;								
 					
-					case 7:																																			//+10f
-
-							if (INITF_flag==0)
-									{
-										CDC_Transmit_FS((uint8_t *)"not allowed\nINITF required\n", 27);
-									}
-		
-							else
-							{					
-									if (current_pos_f<(all_steps_f-9))
-									{							
-									motor_F(1,10,1);
-									go_step_f = 0;
-							
-									sprintf(valuev,"Current FOCUS position: %d steps\n", current_pos_f);
-									CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-									HAL_Delay(1);	
-									CDC_Transmit_FS((uint8_t *)"+10f OK\n", 8);
-									}
-									else 
-									{
-									CDC_Transmit_FS((uint8_t *)"+10f not allowed\n<10 steps to MAX\n",34);
-									}	
-		}							
-						break;
-					
-					case 8:																																			//+10d	
-						
-							if (INITD_flag==0)
-									{
-										CDC_Transmit_FS((uint8_t *)"not allowed\nINITD required\n", 27);
-									}	
-		
-							else
-							{						
-									if (current_pos_d<(all_steps_d-9))
-									{							
-									motor_D(1,10,1);
-									go_step_d = 0;
-									
-									sprintf(valuev,"Current DIAPH position: %d steps\n", current_pos_d);
-									CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-									HAL_Delay(1);	
-									CDC_Transmit_FS((uint8_t *)"+10d OK\n", 8);								
-									}
-									else 
-									{
-									CDC_Transmit_FS((uint8_t *)"+10d not allowed\n<10 steps to MAX\n",34);
-									}
-		}					
-						break;					
-
-					case 9:																																			//-10f	
-
-							if (INITF_flag==0)
-									{
-										CDC_Transmit_FS((uint8_t *)"not allowed\nINITF required\n", 27);
-									}
-		
-							else
-							{						
-									if (current_pos_f>9)
-									{								
-									motor_F(1,10,0);
-									go_step_f = 0;
-
-									sprintf(valuev,"Current FOCUS position: %d steps\n", current_pos_f);
-									CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-									HAL_Delay(1);	
-									CDC_Transmit_FS((uint8_t *)"-10f OK\n", 8);								
-									}
-									else 
-									{
-									CDC_Transmit_FS((uint8_t *)"-10f not allowed\n<10 steps to MIN\n",34);
-									}
-		}					
-						break;
-					
-					case 10:																																			//-10d	
-						
-							if (INITD_flag==0)
-									{
-										CDC_Transmit_FS((uint8_t *)"not allowed\nINITD required\n", 27);
-									}	
-		
-							else
-							{					
-									if (current_pos_d>9)
-									{
-									motor_D(1,10,0);
-									go_step_d = 0;
-									
-									sprintf(valuev,"Current DIAPH position: %d steps\n", current_pos_d);
-									CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-									HAL_Delay(1);	
-									CDC_Transmit_FS((uint8_t *)"-10d OK\n", 8);
-									}
-									else 
-									{
-									CDC_Transmit_FS((uint8_t *)"-10d not allowed\n<10 steps to MIN\n",34);
-									}		
-		}							
-						break;					
-					
-					case 11:																																			//запрос версии прошивки
-									CDC_Transmit_FS((uint8_t *)VERSION_STRING, strlen(VERSION_STRING));
+					case 11:																																			//запрос версии прошивки      +CMGR?
+								HAL_Delay(1);
+								CDC_Transmit_FS((uint8_t *)"OK\n", 3);
+								HAL_Delay(1);
+								CDC_Transmit_FS((uint8_t *)VERSION_STRING, strlen(VERSION_STRING));
 
 						break;
 				
-					case 12:																																			//запрос позиции движков						
-	
+					case 12:																																			//запрос позиции diaph			  +APOS?
+								HAL_Delay(1);						
+								CDC_Transmit_FS((uint8_t *)"OK\n", 3);
 									if (INITD_flag==0)
 											{
-												CDC_Transmit_FS((uint8_t *)"INITD >>> required\nDIAPH POS: NONE\n\n", 36);
-												HAL_Delay(1);
+												HAL_Delay(1);																	
+												CDC_Transmit_FS((uint8_t *)"+CME ERROR: 11\n", 15);
 											}	
-				
 									else
 											{
-												CDC_Transmit_FS((uint8_t *)"INITD >>> OK\n", 13);
-												HAL_Delay(1);
-												sprintf(valuev1,"DIAPH POS: %d%% ", mem_d);
+												HAL_Delay(1);											
+												sprintf(valuev1,"+APOS: %d\n", mem_perc_d);
 												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));							
-												HAL_Delay(1);
-												sprintf(valuev,"(%d steps)\n", current_pos_d);
-												CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-												HAL_Delay(1);
-											}						
+											}													
 
-											
+						break;
+				
+					case 13:																																			//запрос позиции focus					+FPOS?
+								HAL_Delay(1);	
+								CDC_Transmit_FS((uint8_t *)"OK\n", 3);
 									if (INITF_flag==0)
 											{
-												CDC_Transmit_FS((uint8_t *)"INITF >>> required\nFOCUS POS: NONE\n\n", 36);
-												HAL_Delay(1);												
+												HAL_Delay(1);																	
+												CDC_Transmit_FS((uint8_t *)"+CME ERROR: 21\n", 15);												
 											}	
 				
 									else
 											{
-												CDC_Transmit_FS((uint8_t *)"INITF >>> OK\n", 13);
 												HAL_Delay(1);
-												sprintf(valuev1,"FOCUS POS: %d%% ", mem_f);
+												sprintf(valuev1,"+FPOS: %d\n", mem_perc_f);
 												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));							
-												HAL_Delay(1);
-												sprintf(valuev,"(%d steps)\n", current_pos_f);
-												CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-												HAL_Delay(1);
 											}									
 
 						break;
-				
-					case 13:																																			//  dxxx / fxxx
-					
-					if(strncmp(usb_rx,"f", 1)==0)
+															
+					case 14:																																			//  dxxx / fxxx
+								HAL_Delay(1);	
+								CDC_Transmit_FS((uint8_t *)"OK\n", 3);					
+					if(strncmp(usb_rx,"AT+FPOS=", 8)==0)
 					{
-							percent_int_f = atoi(str+1);
+							percent_int_f = atoi(str+8);
 						
-							if (strncmp(usb_rx,"f0", 2)==0)
+							if (strncmp(usb_rx,"AT+FPOS=0", 9)==0)
 								{
 										
 									if (INITF_flag==0)
 											{
-												CDC_Transmit_FS((uint8_t *)"not allowed\nINITF required\n", 27);
+												HAL_Delay(1);
+												CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
 											}
 		
 									else
 									{									
 											percent_int_f=0;
+											mem_perc_f=percent_int_f;
 											one_step_f = all_steps_f/100.0;          
 											stps_f = ((float)percent_int_f * one_step_f);
 																
@@ -828,36 +716,36 @@ int stps_d;
 												{
 													go_step_f = stps_f-current_pos_f;
 													go_dir_f = 1;
-												} 
-											sprintf(valuev1,"Moving to %d %% of FOCUS\n", percent_int_f);
-											CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));							
-											motor_F(1,go_step_f,go_dir_f);
-											go_step_f = 0;
-
-											sprintf(valuev,"Current FOCUS position: %d steps\n", current_pos_f);
-											CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-											HAL_Delay(1);	
-											CDC_Transmit_FS((uint8_t *)"FOCUS OK\n",9);							
+												} 							
+												motor_F(1,go_step_f,go_dir_f);
+												go_step_f = 0;
+												HAL_Delay(1);
+												sprintf(valuev1,"+FPOS: %d\n", percent_int_f);
+												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));					
 									}
 								
 							}
 							else if (percent_int_f<1)
 								{
-									CDC_Transmit_FS((uint8_t *)"invalid command\n",16);
+									HAL_Delay(1);
+									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
 								}
 							else if (percent_int_f>100)
 								{
-									CDC_Transmit_FS((uint8_t *)"invalid command\n",16);
+									HAL_Delay(1);
+									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
 								}
 							else
 								{
 									if (INITF_flag==0)
 											{
-												CDC_Transmit_FS((uint8_t *)"not allowed\nINITF required\n", 27);
+												HAL_Delay(1);
+												CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
 											}
 		
 									else
-									{									
+									{
+											mem_perc_f=percent_int_f;										
 											one_step_f = all_steps_f/100.0;          
 											stps_f = ((float)percent_int_f * one_step_f);
 																
@@ -871,34 +759,32 @@ int stps_d;
 													go_step_f = stps_f-current_pos_f;
 													go_dir_f = 1;
 												} 
-											sprintf(valuev1,"Moving to %d %% of FOCUS\n", percent_int_f);
-											CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));							
-											motor_F(1,go_step_f,go_dir_f);
-											go_step_f = 0;
-
-											sprintf(valuev,"Current FOCUS position: %d steps\n", current_pos_f);
-											CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-											HAL_Delay(1);	
-											CDC_Transmit_FS((uint8_t *)"FOCUS OK\n",9);
+												motor_F(1,go_step_f,go_dir_f);
+												go_step_f = 0;
+												HAL_Delay(1);
+												sprintf(valuev1,"+FPOS: %d\n", percent_int_f);
+												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));
 									}
 								}
 					}
 						
-					else if(strncmp(usb_rx,"d", 1)==0)
+					else if(strncmp(usb_rx,"AT+APOS=", 8)==0)
 					{						
-							percent_int_d = atoi(str+1);					
+							percent_int_d = atoi(str+8);					
 	
-							if (strncmp(usb_rx,"d0", 2)==0)
+							if (strncmp(usb_rx,"AT+APOS=0", 9)==0)
 								{
 												
 									if (INITD_flag==0)
 											{
-												CDC_Transmit_FS((uint8_t *)"not allowed\nINITD required\n", 27);
+												HAL_Delay(1);
+												CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
 											}	
 		
 									else
 									{									
 											percent_int_d=0;
+											mem_perc_d=percent_int_d;
 											one_step_d = all_steps_d/100.0;          
 											stps_d = ((float)percent_int_d * one_step_d);
 																
@@ -912,35 +798,35 @@ int stps_d;
 													go_step_d = stps_d-current_pos_d;
 													go_dir_d = 1;
 												} 
-											sprintf(valuev1,"Moving to %d %% of DIAPH\n", percent_int_d);
-											CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));
-											motor_D(1,go_step_d,go_dir_d);
-											go_step_d = 0;
-
-											sprintf(valuev,"Current DIAPH position: %d steps\n", current_pos_d);
-											CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-											HAL_Delay(1);	
-											CDC_Transmit_FS((uint8_t *)"DIAPH OK\n",9);
+												motor_D(1,go_step_d,go_dir_d);
+												go_step_d = 0;
+												HAL_Delay(1);
+												sprintf(valuev1,"+APOS: %d\n", percent_int_d);
+												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));	
 									}
 								}
 						  else if (percent_int_d<1)
 								{
-									CDC_Transmit_FS((uint8_t *)"invalid command\n",16);
+									HAL_Delay(1);
+									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
 								}
 							else if (percent_int_d>100)
 								{
-									CDC_Transmit_FS((uint8_t *)"invalid command\n",16);
+									HAL_Delay(1);
+									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
 								}										
 							else
 								{
 									
 									if (INITD_flag==0)
 											{
-												CDC_Transmit_FS((uint8_t *)"not allowed\nINITD required\n", 27);
+												HAL_Delay(1);
+												CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
 											}	
 		
 									else
-									{									
+									{
+											mem_perc_d=percent_int_d;										
 											one_step_d = all_steps_d/100.0;          
 											stps_d = ((float)percent_int_d * one_step_d);
 																
@@ -954,33 +840,32 @@ int stps_d;
 													go_step_d = stps_d-current_pos_d;
 													go_dir_d = 1;
 												} 
-											sprintf(valuev1,"Moving to %d %% of DIAPH\n", percent_int_d);
-											CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));
-											motor_D(1,go_step_d,go_dir_d);
-											go_step_d = 0;
-
-											sprintf(valuev,"Current DIAPH position: %d steps\n", current_pos_d);
-											CDC_Transmit_FS((uint8_t *)valuev, strlen(valuev));
-											HAL_Delay(1);	
-											CDC_Transmit_FS((uint8_t *)"DIAPH OK\n",9);
+												motor_D(1,go_step_d,go_dir_d);
+												go_step_d = 0;
+												HAL_Delay(1);
+												sprintf(valuev1,"+APOS: %d\n", percent_int_d);
+												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));
 									}
 								}
 						}
 						
 					else
 							{
-							CDC_Transmit_FS((uint8_t *)"invalid command\n",16);
+									HAL_Delay(1);
+									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
 							}
 		//}				
 						break;
 		
 					case 0:
-							CDC_Transmit_FS((uint8_t *)"invalid command\n",16);
+									HAL_Delay(1);
+									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
 						break;													
 		}
 											percent_int_d=0;
 											one_step_d = all_steps_d/100.0;          
 											mem_d = current_pos_d / one_step_d;
+		
 											percent_int_f=0;
 											one_step_f = all_steps_f/100.0;          
 											mem_f = current_pos_f / one_step_f;		
