@@ -70,6 +70,8 @@ int speed=1;
 int current_pos_f;
 int current_pos_d;
 int zero_check;
+int init_pos_f;
+int init_pos_d;
 
 int percent_int_f = 0;
 int mem_f;
@@ -146,7 +148,6 @@ void EXTI12_IRQHandler(void)						//interrupt FAULT
 
   if (HAL_GPIO_ReadPin(STMPS_PORT, STMPS_FT))
 					{
-						HAL_UART_Transmit(&huart1, (uint8_t *)"ZAP!\n", 5, 0xfff);
 						HAL_GPIO_WritePin(STMPS_PORT, STMPS_EN, GPIO_PIN_SET);
 						HAL_Delay(50);
 						HAL_GPIO_WritePin(STMPS_PORT, STMPS_EN, GPIO_PIN_RESET);
@@ -174,7 +175,7 @@ void motor_F(int speed, int steps, int dir)						//функция управле
 { 
 		
 		if (dir==1)	
-{																					//ПРОТИВ ЧАСОВОЙ
+{																					//ПОЛОЖИТ
 		
 		for(int i = 0; i<steps; i++)
 	{
@@ -212,7 +213,7 @@ current_pos_f++;
 }
 
 		else if (dir==0)	
-{																					//ПО ЧАСОВОЙ
+{																					//ОТРИЦАТ
 		
 		for(int i = 0; i<steps; i++)
 	{
@@ -253,7 +254,7 @@ void motor_D(int speed, int steps, int dir)						//функция управле
 { 
 		
 		if (dir==0)	
-{																					//ПРОТИВ ЧАСОВОЙ
+{																					//ПОЛОЖИТ
 		
 		for(int i = 0; i<steps; i++)
 	{
@@ -291,7 +292,7 @@ current_pos_d--;
 }
 
 		else if (dir==1)	
-{																					//ПО ЧАСОВОЙ
+{																					//отрицат
 		
 		for(int i = 0; i<steps; i++)
 	{
@@ -369,16 +370,21 @@ void go_to_max_d()																		//движение до max диафрагм
       }			
 
 int init_F()
-{
+{		
+			init_pos_f=0;
+			all_steps_f=0;
+			current_pos_f=0;
 	if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1)==1)
 	{
 			go_to_min_f();
+			init_pos_f=current_pos_f;
 			current_pos_f=0;
 			go_to_max_f();
 	}
 	else if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_1)==0)
 	{
 			go_to_max_f();
+			init_pos_f=current_pos_f;
 			current_pos_f=0;
 			go_to_min_f();	
 	}	
@@ -389,15 +395,20 @@ int init_F()
 }
 int init_D()
 {
+			init_pos_d=0;
+			all_steps_d=0;
+			current_pos_d=0;
 	if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0)==1)
 	{
 			go_to_min_d();
+			init_pos_d=current_pos_d;
 			current_pos_d=0;
 			go_to_max_d();
 	}
 	else if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0)==0)
 	{
 			go_to_max_d();
+			init_pos_d=current_pos_d;
 			current_pos_d=0;
 			go_to_min_d();	
 	}	
@@ -488,7 +499,9 @@ int stps_d;
 											if (current_pos_f < 0) current_pos_f = 0;
 											else current_pos_f = all_steps_f;
 											HAL_Delay(1);
-											CDC_Transmit_FS((uint8_t *)"+FIN OK\n", 8);			
+											CDC_Transmit_FS((uint8_t *)"+FIN OK\n", 8);	
+											go_step_f = all_steps_f - init_pos_f;
+											motor_F(1,go_step_f,1);
 									}
 						break;
 					
@@ -507,7 +520,9 @@ int stps_d;
 											if (current_pos_d < 0) current_pos_d = 0;
 											else current_pos_d = all_steps_d;
 											HAL_Delay(1);										
-											CDC_Transmit_FS((uint8_t *)"+AIN OK\n", 8);					
+											CDC_Transmit_FS((uint8_t *)"+AIN OK\n", 8);
+											go_step_d = all_steps_d - init_pos_d;
+											motor_D(1,go_step_d,1);										
 									}
 						break;					
 					
@@ -1024,8 +1039,7 @@ int stps_d;
 							{
 									HAL_Delay(1);
 									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
-							}
-		//}				
+							}			
 						break;
 		
 					case 0:
@@ -1045,7 +1059,6 @@ int stps_d;
 		
 					memset(uart1_rx_buf, '\0', strlen(uart1_rx_buf)); // очистка памяти
 					uart1_rx_bit=0;                                // очистка счётчика			
-//					CDC_Transmit_FS((uint8_t*)&usb_rx, strlen(usb_rx));			
 					memset(usb_rx, 0, sizeof(usb_rx));
 					memset(usb_rx, '\0', sizeof(usb_rx));
 					stop_motor_F();
