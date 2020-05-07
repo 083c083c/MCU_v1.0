@@ -1,12 +1,12 @@
 /*
 
 Name:					MCU SOFTWARE
-Version:				1.1.1
-Date:					06.05.2020
+Version:				1.1.2
+Date:					07.05.2020
 Comment:				COMPLETELY STABLE VERSION (with USB)
 Recent updates:				now new commands
 Owner:					DVLabs
-Made by:				083c083c
+Made by:				083c083c , Sasha Grizzly
 
 */
 
@@ -69,6 +69,7 @@ extern char usb_rx[128];
 int speed=1;
 int current_pos_f;
 int current_pos_d;
+int zero_check;
 
 int percent_int_f = 0;
 int mem_f;
@@ -77,6 +78,7 @@ int all_steps_f = 0;
 float one_step_f = 0.0;
 int go_step_f = 0;
 _Bool go_dir_f = 0;
+int lim_f = 3900;
 
 int percent_int_d = 0;
 int mem_d;
@@ -85,6 +87,7 @@ int all_steps_d = 0;
 float one_step_d = 0.0;
 int go_step_d = 0;
 _Bool go_dir_d = 0;
+int lim_d = 850;
 
 char valuev[100];
 char valuev1[100];
@@ -437,20 +440,28 @@ int stps_d;
 					 else if(strncmp(usb_rx,"AT+AMAX\r",8)==0) 					//max diaph
 					 {
 							input=6;
-					 }			 
+					 }
+					 else if(strncmp(usb_rx,"AT+FMOV=",8)==0) 					//FMOV
+					 {
+							input=7;
+					 }					 
+					 else if(strncmp(usb_rx,"AT+AMOV=",8)==0) 					//AMOV
+					 {
+							input=8;
+					 }					 
 					 else if(strncmp(usb_rx,"AT+CMGR?\r",9)==0) 		  	//запрос версии прошивки
 					 {
 							input=11;
 					 }
-					 else if(strncmp(usb_rx,"AT+APOS?\r",9)==0) 			  //запрос позиции focus движка
+					 else if(strncmp(usb_rx,"AT+APOS?\r",9)==0) 			  //запрос позиции diaph движка
 					 {
 							input=12;
 					 }
-					 else if(strncmp(usb_rx,"AT+FPOS?\r",9)==0) 			  //запрос позиции diaph движкa
+					 else if(strncmp(usb_rx,"AT+FPOS?\r",9)==0) 			  //запрос позиции focus движкa
 					 {
 							input=13;
 					 }					 
-					 else if(strcmp(usb_rx,str)==0) 										//парсинг чисел из терминала
+					 else if(strcmp(usb_rx,str)==0) 										//  APOS= / FPOS=
 					 {
 							input=14;
 					 }
@@ -466,7 +477,7 @@ int stps_d;
 								HAL_Delay(1);
 								CDC_Transmit_FS((uint8_t *)"OK\n", 3);
 								all_steps_f = init_F();
-							if (all_steps_f>3900)
+							if (all_steps_f>lim_f)
 									{
 											HAL_Delay(1);
 											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 21\n", 15);
@@ -485,7 +496,7 @@ int stps_d;
 								HAL_Delay(1);					
 								CDC_Transmit_FS((uint8_t *)"OK\n", 3);						
 								all_steps_d = init_D();
-							if (all_steps_d>850)
+							if (all_steps_d>lim_d)
 									{
 											HAL_Delay(1);								
 											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 11\n", 15);	
@@ -639,7 +650,149 @@ int stps_d;
 								HAL_Delay(1);		
 								CDC_Transmit_FS((uint8_t *)"+AMAX OK\n", 9);	
 		}								
-						break;								
+						break;
+
+					case 7:																																			//  +FMOV
+							HAL_Delay(1);
+							CDC_Transmit_FS((uint8_t *)"OK\n", 3);
+							percent_int_f = atoi(str+9);
+								if (percent_int_f<1)
+												{
+													HAL_Delay(1);
+													CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
+												}
+								else if (percent_int_f>99)
+												{
+													HAL_Delay(1);
+													CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
+												}
+								else
+								{
+					
+										if (INITF_flag==0)
+												{
+													HAL_Delay(1);
+													CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
+												}
+		
+										else
+												{
+													one_step_f = all_steps_f/100.0;          
+													stps_f = ((float)percent_int_f * one_step_f);
+																
+											if(strncmp(usb_rx,"AT+FMOV=-", 9)==0) 
+												{
+													if ((current_pos_f-stps_f)<0)
+														{
+															HAL_Delay(1);
+															CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
+														}
+													else
+														{
+															go_step_f = stps_f;
+															go_dir_f = 0;
+															mem_perc_f=(-1)*percent_int_f;
+											motor_F(1,go_step_f,go_dir_f);
+											go_step_f = 0;
+											HAL_Delay(1);
+											sprintf(valuev1,"+FMOV: %d\n", mem_perc_f);
+											CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));															
+														}
+												}
+											else if(strncmp(usb_rx,"AT+FMOV=+", 9)==0)
+												{
+													if ((current_pos_f+stps_f)>lim_f)
+														{
+															HAL_Delay(1);
+															CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
+														}
+													else
+														{
+															go_step_f = stps_f;
+															go_dir_f = 1;
+															mem_perc_f=percent_int_f;
+											motor_F(1,go_step_f,go_dir_f);
+											go_step_f = 0;
+											HAL_Delay(1);
+											sprintf(valuev1,"+FMOV: %d\n", mem_perc_f);
+											CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));
+														}
+												}									
+										}
+								}		
+								
+						break;
+
+					case 8:																																			//  +AMOV 
+							HAL_Delay(1);
+							CDC_Transmit_FS((uint8_t *)"OK\n", 3);
+							percent_int_d = atoi(str+9);
+								if (percent_int_d<1)
+												{
+													HAL_Delay(1);
+													CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
+												}
+								else if (percent_int_d>99)
+												{
+													HAL_Delay(1);
+													CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);
+												}
+								else
+								{
+					
+										if (INITD_flag==0)
+												{
+													HAL_Delay(1);
+													CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
+												}
+		
+										else
+												{
+													one_step_d = all_steps_d/100.0;          
+													stps_d = ((float)percent_int_d * one_step_d);
+																
+											if(strncmp(usb_rx,"AT+AMOV=-", 9)==0) 
+												{
+													if ((current_pos_d-stps_d)<0)
+														{
+															HAL_Delay(1);
+															CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
+														}
+													else
+														{
+															go_step_d = stps_d;
+															go_dir_d = 0;
+															mem_perc_d=(-1)*percent_int_d;
+											motor_D(1,go_step_d,go_dir_d);
+											go_step_d = 0;
+											HAL_Delay(1);
+											sprintf(valuev1,"+AMOV: %d\n", mem_perc_d);
+											CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));															
+														}
+												}
+											else if(strncmp(usb_rx,"AT+AMOV=+", 9)==0)
+												{
+													if ((current_pos_d+stps_d)>lim_d)
+														{
+															HAL_Delay(1);
+															CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
+														}
+													else
+														{
+															go_step_d = stps_d;
+															go_dir_d = 1;
+															mem_perc_d=percent_int_d;
+											motor_D(1,go_step_d,go_dir_d);
+											go_step_d = 0;
+											HAL_Delay(1);
+											sprintf(valuev1,"+AMOV: %d\n", mem_perc_d);
+											CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));
+														}
+												}									
+										}
+								}		
+								
+						break;		
 					
 					case 11:																																			//запрос версии прошивки      +CMGR?
 								HAL_Delay(1);
@@ -659,8 +812,9 @@ int stps_d;
 											}	
 									else
 											{
+												mem_d = current_pos_d / one_step_d;
 												HAL_Delay(1);											
-												sprintf(valuev1,"+APOS: %d\n", mem_perc_d);
+												sprintf(valuev1,"+APOS: %d\n", mem_d);
 												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));							
 											}													
 
@@ -677,8 +831,9 @@ int stps_d;
 				
 									else
 											{
+												mem_f = current_pos_f / one_step_f;
 												HAL_Delay(1);
-												sprintf(valuev1,"+FPOS: %d\n", mem_perc_f);
+												sprintf(valuev1,"+FPOS: %d\n", mem_f);
 												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));							
 											}									
 
@@ -690,40 +845,47 @@ int stps_d;
 					if(strncmp(usb_rx,"AT+FPOS=", 8)==0)
 					{
 							percent_int_f = atoi(str+8);
+							zero_check = atoi(str+9);
 						
 							if (strncmp(usb_rx,"AT+FPOS=0", 9)==0)
 								{
-										
-									if (INITF_flag==0)
-											{
-												HAL_Delay(1);
-												CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
+									if (zero_check=='\0')
+									{	
+											if (INITF_flag==0)
+													{
+														HAL_Delay(1);
+														CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
+													}
+				
+											else
+											{									
+													percent_int_f=0;
+													mem_perc_f=percent_int_f;
+													one_step_f = all_steps_f/100.0;          
+													stps_f = ((float)percent_int_f * one_step_f);
+																		
+													if (current_pos_f > stps_f) 
+														{
+															go_step_f = abs(current_pos_f-stps_f);
+															go_dir_f = 0;
+														}
+													else if (current_pos_f < stps_f) 
+														{
+															go_step_f = stps_f-current_pos_f;
+															go_dir_f = 1;
+														} 							
+														motor_F(1,go_step_f,go_dir_f);
+														go_step_f = 0;
+														HAL_Delay(1);
+														sprintf(valuev1,"+FPOS: %d\n", percent_int_f);
+														CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));					
 											}
-		
-									else
-									{									
-											percent_int_f=0;
-											mem_perc_f=percent_int_f;
-											one_step_f = all_steps_f/100.0;          
-											stps_f = ((float)percent_int_f * one_step_f);
-																
-											if (current_pos_f > stps_f) 
-												{
-													go_step_f = abs(current_pos_f-stps_f);
-													go_dir_f = 0;
-												}
-											else if (current_pos_f < stps_f) 
-												{
-													go_step_f = stps_f-current_pos_f;
-													go_dir_f = 1;
-												} 							
-												motor_F(1,go_step_f,go_dir_f);
-												go_step_f = 0;
-												HAL_Delay(1);
-												sprintf(valuev1,"+FPOS: %d\n", percent_int_f);
-												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));					
-									}
-								
+								}
+								else
+								{
+									HAL_Delay(1);
+									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);	
+								}
 							}
 							else if (percent_int_f<1)
 								{
@@ -770,41 +932,50 @@ int stps_d;
 						
 					else if(strncmp(usb_rx,"AT+APOS=", 8)==0)
 					{						
-							percent_int_d = atoi(str+8);					
+							percent_int_d = atoi(str+8);
+							zero_check = atoi(str+9);						
 	
 							if (strncmp(usb_rx,"AT+APOS=0", 9)==0)
 								{
+									if (zero_check=='\0')
+									{
 												
-									if (INITD_flag==0)
-											{
-												HAL_Delay(1);
-												CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
-											}	
-		
-									else
-									{									
-											percent_int_d=0;
-											mem_perc_d=percent_int_d;
-											one_step_d = all_steps_d/100.0;          
-											stps_d = ((float)percent_int_d * one_step_d);
-																
-											if (current_pos_d > stps_d) 
-												{
-													go_step_d = abs(current_pos_d-stps_d);
-													go_dir_d = 0;
-												}
-											else if (current_pos_d < stps_d) 
-												{
-													go_step_d = stps_d-current_pos_d;
-													go_dir_d = 1;
-												} 
-												motor_D(1,go_step_d,go_dir_d);
-												go_step_d = 0;
-												HAL_Delay(1);
-												sprintf(valuev1,"+APOS: %d\n", percent_int_d);
-												CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));	
-									}
+											if (INITD_flag==0)
+													{
+														HAL_Delay(1);
+														CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
+													}	
+				
+											else
+											{									
+													percent_int_d=0;
+													mem_perc_d=percent_int_d;
+													one_step_d = all_steps_d/100.0;          
+													stps_d = ((float)percent_int_d * one_step_d);
+																		
+													if (current_pos_d > stps_d) 
+														{
+															go_step_d = abs(current_pos_d-stps_d);
+															go_dir_d = 0;
+														}
+													else if (current_pos_d < stps_d) 
+														{
+															go_step_d = stps_d-current_pos_d;
+															go_dir_d = 1;
+														} 
+														motor_D(1,go_step_d,go_dir_d);
+														go_step_d = 0;
+														HAL_Delay(1);
+														sprintf(valuev1,"+APOS: %d\n", percent_int_d);
+														CDC_Transmit_FS((uint8_t *)valuev1, strlen(valuev1));	
+											}
 								}
+								else
+								{
+									HAL_Delay(1);
+									CDC_Transmit_FS((uint8_t *)"+CME ERROR: 3\n", 14);	
+								}
+							}
 						  else if (percent_int_d<1)
 								{
 									HAL_Delay(1);
@@ -867,8 +1038,9 @@ int stps_d;
 											mem_d = current_pos_d / one_step_d;
 		
 											percent_int_f=0;
-											one_step_f = all_steps_f/100.0;          
+											one_step_f = all_steps_f/100.0;
 											mem_f = current_pos_f / one_step_f;		
+													
 		
 		
 					memset(uart1_rx_buf, '\0', strlen(uart1_rx_buf)); // очистка памяти
