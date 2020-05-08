@@ -1,13 +1,11 @@
 /*
-
 Name:					MCU SOFTWARE
-Version:				1.1.2
-Date:					07.05.2020
+Version:				1.1.3
+Date:					08.05.2020
 Comment:				COMPLETELY STABLE VERSION (with USB)
-Recent updates:				now new commands
+Recent updates:				now new commands + fixed few bugs
 Owner:					DVLabs
 Made by:				083c083c , Sasha Grizzly
-
 */
 
 #include "main.h"
@@ -38,8 +36,9 @@ UART_HandleTypeDef huart3;
 #define EN_MOT_1_1 GPIO_PIN_7
 #define EN_MOT_1_2 GPIO_PIN_13
 
-
-#define VERSION_STRING "MCU_V_1_1\n"  //ВЕРСИЯ ПРОШИВКИ
+#define lim_f 3900
+#define lim_d 850
+#define VERSION_STRING "MCU V1.1\n"  //ВЕРСИЯ ПРОШИВКИ
 
 
 #define PORT_M_2 GPIOC
@@ -54,12 +53,14 @@ UART_HandleTypeDef huart3;
 #define STMPS_FT GPIO_PIN_12 		//pin2
 #define STMPS_PORT GPIOB 			  //GPIOB
 
-_Bool MAX_FLAG_F;
-_Bool MIN_FLAG_F;
-_Bool MAX_FLAG_D;
-_Bool MIN_FLAG_D;
+		int MAX_FLAG_F;
+		int MIN_FLAG_F;
+		int MAX_FLAG_D;
+		int MIN_FLAG_D;
 int INITF_flag=0;
 int INITD_flag=0;
+int lim_f_error_flag=0;
+int lim_d_error_flag=0;
 
 char uart1_data;
 char uart1_rx_buf[128];	
@@ -80,7 +81,7 @@ int all_steps_f = 0;
 float one_step_f = 0.0;
 int go_step_f = 0;
 _Bool go_dir_f = 0;
-int lim_f = 3900;
+//int lim_f = 3900;
 
 int percent_int_d = 0;
 int mem_d;
@@ -89,7 +90,7 @@ int all_steps_d = 0;
 float one_step_d = 0.0;
 int go_step_d = 0;
 _Bool go_dir_d = 0;
-int lim_d = 850;
+//int lim_d = 850;
 
 char valuev[100];
 char valuev1[100];
@@ -336,6 +337,13 @@ void go_to_min_f()																		//движение до min фокуса
 				while(MIN_FLAG_F != 1)
            { 
 						 motor_F(1,5,1);
+						 
+						 if (current_pos_f>lim_f)
+						 {
+							 		MAX_FLAG_F = 1;
+									MIN_FLAG_F = 1;
+									lim_f_error_flag = 1;
+						 }
            }       
       }
 void go_to_min_d()																		//движение до min диафрагмы
@@ -346,6 +354,13 @@ void go_to_min_d()																		//движение до min диафрагм
 				while(MIN_FLAG_D != 1)
            { 
 						 motor_D(1,5,0);
+						 
+						 if (current_pos_d<-lim_d)
+						 {
+							 		MAX_FLAG_D = 1;
+									MIN_FLAG_D = 1;
+									lim_d_error_flag = 1;
+						 }
            }       
       }			
 void go_to_max_f()																		//движение до max фокуса
@@ -356,6 +371,13 @@ void go_to_max_f()																		//движение до max фокуса
 				while(MAX_FLAG_F != 1)
            {
 						 motor_F(1,5,0);
+						 
+						 if (current_pos_f<-lim_f)
+						 {
+							 		MAX_FLAG_F = 1;
+									MIN_FLAG_F = 1;
+									lim_f_error_flag = 1;
+						 }
            }
       }
 void go_to_max_d()																		//движение до max диафрагмы
@@ -366,6 +388,13 @@ void go_to_max_d()																		//движение до max диафрагм
 				while(MAX_FLAG_D != 1)
            {
 						 motor_D(1,5,1);
+						 
+						 if (current_pos_d>lim_d)
+						 {
+							 		MAX_FLAG_D = 1;
+									MIN_FLAG_D = 1;
+									lim_d_error_flag = 1;
+						 }
            }
       }			
 
@@ -389,7 +418,7 @@ int init_F()
 			go_to_min_f();	
 	}	
 	int steps_f = abs(current_pos_f);
-	INITF_flag=1;
+
      return steps_f;
 
 }
@@ -413,7 +442,7 @@ int init_D()
 			go_to_min_d();	
 	}	
 	int steps_d = abs(current_pos_d);
-	INITD_flag=1;
+
      return steps_d;
 	
 }
@@ -488,7 +517,7 @@ int stps_d;
 								HAL_Delay(1);
 								CDC_Transmit_FS((uint8_t *)"OK\n", 3);
 								all_steps_f = init_F();
-							if (all_steps_f>lim_f)
+							if ((all_steps_f>lim_f) || (lim_f_error_flag==1))
 									{
 											HAL_Delay(1);
 											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 21\n", 15);
@@ -502,6 +531,7 @@ int stps_d;
 											CDC_Transmit_FS((uint8_t *)"+FIN OK\n", 8);	
 											go_step_f = all_steps_f - init_pos_f;
 											motor_F(1,go_step_f,1);
+										INITF_flag=1;
 									}
 						break;
 					
@@ -509,7 +539,7 @@ int stps_d;
 								HAL_Delay(1);					
 								CDC_Transmit_FS((uint8_t *)"OK\n", 3);						
 								all_steps_d = init_D();
-							if (all_steps_d>lim_d)
+							if ((all_steps_d>lim_d) || (lim_d_error_flag==1))
 									{
 											HAL_Delay(1);								
 											CDC_Transmit_FS((uint8_t *)"+CME ERROR: 11\n", 15);	
@@ -522,7 +552,8 @@ int stps_d;
 											HAL_Delay(1);										
 											CDC_Transmit_FS((uint8_t *)"+AIN OK\n", 8);
 											go_step_d = all_steps_d - init_pos_d;
-											motor_D(1,go_step_d,1);										
+											motor_D(1,go_step_d,1);	
+										INITD_flag=1;										
 									}
 						break;					
 					
@@ -716,7 +747,7 @@ int stps_d;
 												}
 											else if(strncmp(usb_rx,"AT+FMOV=+", 9)==0)
 												{
-													if ((current_pos_f+stps_f)>lim_f)
+													if ((current_pos_f+stps_f)>all_steps_f)
 														{
 															HAL_Delay(1);
 															CDC_Transmit_FS((uint8_t *)"+CME ERROR: 23\n", 15);
@@ -787,7 +818,7 @@ int stps_d;
 												}
 											else if(strncmp(usb_rx,"AT+AMOV=+", 9)==0)
 												{
-													if ((current_pos_d+stps_d)>lim_d)
+													if ((current_pos_d+stps_d)>all_steps_d)
 														{
 															HAL_Delay(1);
 															CDC_Transmit_FS((uint8_t *)"+CME ERROR: 12\n", 15);
